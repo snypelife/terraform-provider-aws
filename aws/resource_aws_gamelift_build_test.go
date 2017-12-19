@@ -13,7 +13,7 @@ import (
 	"github.com/hashicorp/terraform/terraform"
 )
 
-const testAccGameliftPrefix = "tf_acc_build_"
+const testAccGameliftBuildPrefix = "tf_acc_build_"
 
 func init() {
 	resource.AddTestSweepers("aws_gamelift_build", &resource.Sweeper{
@@ -42,7 +42,7 @@ func testSweepGameliftBuilds(region string) error {
 	log.Printf("[INFO] Found %d Gamelift Builds", len(resp.Builds))
 
 	for _, build := range resp.Builds {
-		if !strings.HasPrefix(*build.Name, testAccGameliftPrefix) {
+		if !strings.HasPrefix(*build.Name, testAccGameliftBuildPrefix) {
 			continue
 		}
 
@@ -64,15 +64,16 @@ func TestAccAWSGameliftBuild_basic(t *testing.T) {
 
 	rString := acctest.RandString(8)
 
-	buildName := fmt.Sprintf("%s_%s", testAccGameliftPrefix, rString)
-	uBuildName := fmt.Sprintf("%s_updated_%s", testAccGameliftPrefix, rString)
+	buildName := fmt.Sprintf("%s_%s", testAccGameliftBuildPrefix, rString)
+	uBuildName := fmt.Sprintf("%s_updated_%s", testAccGameliftBuildPrefix, rString)
 
 	region := testAccGetRegion()
-	loc, err := testAccAWSGameliftSampleGameLocation(region)
+	g, err := testAccAWSGameliftSampleGameLocation(region)
 	if err != nil {
 		t.Fatal(err)
 	}
 
+	loc := g.Location
 	bucketName := *loc.Bucket
 	roleArn := *loc.RoleArn
 	key := *loc.Key
@@ -170,9 +171,15 @@ func testAccCheckAWSGameliftBuildDestroy(s *terraform.State) error {
 	return nil
 }
 
+type testAccGameliftGame struct {
+	Location   *gamelift.S3Location
+	LaunchPath string
+	Parameters string
+}
+
 // Location found from CloudTrail event after finishing tutorial
 // e.g. https://us-west-2.console.aws.amazon.com/gamelift/home?region=us-west-2#/r/fleets/sample
-func testAccAWSGameliftSampleGameLocation(region string) (*gamelift.S3Location, error) {
+func testAccAWSGameliftSampleGameLocation(region string) (*testAccGameliftGame, error) {
 	version := "v1.2.0.0"
 	accId, err := testAccGameliftAccountIdByRegion(region)
 	if err != nil {
@@ -182,10 +189,17 @@ func testAccAWSGameliftSampleGameLocation(region string) (*gamelift.S3Location, 
 	key := fmt.Sprintf("%s/server/sample_build_%s", version, version)
 	roleArn := fmt.Sprintf("arn:aws:iam::%s:role/sample-build-upload-role-%s", accId, region)
 
-	return &gamelift.S3Location{
-		Bucket:  aws.String(bucket),
-		Key:     aws.String(key),
-		RoleArn: aws.String(roleArn),
+	launchPath := `C:\game\Bin64.Release.Dedicated\MultiplayerProjectLauncher_Server.exe`
+	params := "+sv_port 33435 +gamelift_start_server"
+
+	return &testAccGameliftGame{
+		Location: &gamelift.S3Location{
+			Bucket:  aws.String(bucket),
+			Key:     aws.String(key),
+			RoleArn: aws.String(roleArn),
+		},
+		LaunchPath: launchPath,
+		Parameters: params,
 	}, nil
 }
 
